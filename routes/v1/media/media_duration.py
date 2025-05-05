@@ -4,38 +4,46 @@ from services.authentication import authenticate
 import subprocess
 import requests
 from tempfile import NamedTemporaryFile
+import os
 import logging
+from urllib.parse import urlparse
 
-v1_audio_duration_bp = Blueprint("v1_audio_duration_bp", __name__)
+v1_media_duration_bp = Blueprint("v1_media_duration_bp", __name__)
 logger = logging.getLogger(__name__)
 
-@v1_audio_duration_bp.route("/v1/audio/audio-duration", methods=["POST"])
+@v1_media_duration_bp.route("/v1/media/media-duration", methods=["POST"])
 @authenticate
 @validate_payload(
     {
         "type": "object",
         "properties": {
-            "file_url": {"type": "string", "format": "uri"},
+            "media_url": {"type": "string", "format": "uri"},
             "webhook_url": {"type": "string", "format": "uri"},
             "id": {"type": "string"}
         },
-        "required": ["file_url"],
+        "required": ["media_url"],
         "additionalProperties": False
     }
 )
 @queue_task_wrapper(bypass_queue=False)
-def get_audio_duration(job_id, data):
-    file_url = data.get("file_url")
+def get_media_duration(job_id, data):
+    media_url = data.get("media_url")
     webhook_url = data.get("webhook_url")
     id = data.get("id")
 
-    logger.info(f"Job {job_id}: Received duration request for {file_url}")
+    logger.info(f"Job {job_id}: Received media duration request for {media_url}")
 
     try:
-        response = requests.get(file_url)
+        response = requests.get(media_url)
         response.raise_for_status()
 
-        with NamedTemporaryFile(suffix=".mp3") as tmp:
+        # Extract file extension from URL
+        parsed_url = urlparse(media_url)
+        _, ext = os.path.splitext(parsed_url.path)
+        if not ext:
+            ext = ".mp3"  # fallback to .mp3 if no extension
+
+        with NamedTemporaryFile(suffix=ext) as tmp:
             tmp.write(response.content)
             tmp.flush()
 
@@ -51,12 +59,12 @@ def get_audio_duration(job_id, data):
             if result.returncode != 0:
                 error_msg = result.stderr.strip()
                 logger.error(f"Job {job_id}: ffprobe error - {error_msg}")
-                return error_msg, "/v1/audio/audio-duration", 500
+                return error_msg, "/v1/media/media-duration", 500
 
             duration = float(result.stdout.strip())
-            logger.info(f"Job {job_id}: duration is {duration} seconds")
-            return {"duration": round(duration, 2)}, "/v1/audio/audio-duration", 200
+            logger.info(f"Job {job_id}: media duration is {duration} seconds")
+            return round(duration, 2), "/v1/media/media-duration", 200
 
     except Exception as e:
         logger.exception(f"Job {job_id}: Exception - {str(e)}")
-        return str(e), "/v1/audio/audio-duration", 500
+        return str(e), "/v1/media/media-duration", 500
