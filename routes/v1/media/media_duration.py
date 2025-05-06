@@ -1,7 +1,7 @@
 from flask import Blueprint
 from app_utils import validate_payload, queue_task_wrapper
 from services.authentication import authenticate
-from services.media.media_duration import get_media_duration_from_url
+from services.v1.media.media_duration import get_media_duration_from_url
 import logging
 
 v1_media_duration_bp = Blueprint("v1_media_duration_bp", __name__)
